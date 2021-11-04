@@ -8,7 +8,7 @@ def load_file(f):
     ignores empty lines"""
     with open(f, "r") as fp:
         # only read nonempty lines
-        return [ list(l.replace("\n", "")) for l in fp if l ]
+        return [ list(l.replace("\n", "")) for l in fp if l and not l.startswith("#") ]
 
 
 def to_str(s):
