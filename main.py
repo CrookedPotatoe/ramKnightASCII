@@ -8,7 +8,9 @@ def load_file(f):
     ignores empty lines"""
     with open(f, "r") as fp:
         # only read nonempty lines
-        return [ list(l.replace("\n", "")) for l in fp if l and not l.startswith("#") ]
+        s = [ list(l.replace("\n", "")) for l in fp if l and not l.startswith("#") ]
+        s = update_lasers(s)
+        return s
 
 
 def to_str(s):
@@ -68,7 +70,8 @@ _victory = 0
 _invalid = 1
 _unfinished = 2
 _defeated = 3
-_valid_chars = "G@YFMm_. xoWw"
+_valid_chars = "G@YFMm_. xoWwv^<>|+-"
+
 
 def validate_state(s):
     """returns the validity of the game state using the above exit codes;
@@ -125,6 +128,72 @@ def validate_state(s):
     return _unfinished
 
 
+def determine_new_state(s):
+    for i, l in enumerate(s):
+        for j, c in enumerate(l):
+            if c in "Y":
+                return _defeated
+            elif c in "@":
+                return _victory
+
+    return _unfinished
+
+
+def update_lasers(s):
+    # clear all beams
+    for c in "|-+":
+        for row, col in find_pos(s, c):
+            set_at_pos(s, row, col, " ")
+
+    lasers = []
+    height, width = bounds(s)
+
+    for laser_row, laser_col in find_pos(s, "<"):
+        lasers.append((laser_row, laser_col, "h"))
+
+    for laser_row, laser_col in find_pos(s, ">"):
+        lasers.append((laser_row, laser_col, "l"))
+
+    for laser_row, laser_col in find_pos(s, "^"):
+        lasers.append((laser_row, laser_col, "k"))
+
+    for laser_row, laser_col in find_pos(s, "v"):
+        lasers.append((laser_row, laser_col, "j"))
+
+    for laser_row, laser_col, dir in lasers:
+        next_row, next_col = next_pos(laser_row, laser_col, dir)
+        while True:
+            # stop when going out of bounds
+            if not in_bounds(height=height, width=width, row= next_row, col=next_col):
+                break
+
+            # laser beams cross each other
+            elif at_pos(s, next_row, next_col) in "-" and dir in "jk":
+                set_at_pos(s, next_row, next_col, "+")
+
+            elif at_pos(s, next_row, next_col) in "|" and dir in "hl":
+                set_at_pos(s, next_row, next_col, "+")
+
+            # player get hit
+            elif at_pos(s, next_row, next_col) == "G":
+                set_at_pos(s, next_row, next_col, "Y")
+                break
+
+            # laser hits obstacle
+            elif at_pos(s, next_row, next_col) in "FmMwWY<>^v":
+                break
+
+            else:
+                if dir in "hl":
+                    set_at_pos(s, next_row, next_col, "-")
+                elif dir in "jk":
+                    set_at_pos(s, next_row, next_col, "|")
+
+            next_row, next_col = next_pos(next_row, next_col, dir)
+
+    return s
+
+
 def move(s, dir):
     """move ram in dir on level state s;
     this is the core game logic"""
@@ -140,7 +209,6 @@ def move(s, dir):
         else:
             return _invalid
     row, col = p[0]
-
     # move until obstacle is reached
     while True:
         next_row, next_col = next_pos(row, col, dir)
@@ -162,12 +230,15 @@ def move(s, dir):
         elif c in "m":
             set_at_pos(s, next_row, next_col, "_")
             return _unfinished
+        elif c in "v^<>":
+            set_at_pos(s, next_row, next_col, "_")
+            return _unfinished
         # finish flag => change to victory ram and stop
         elif c in "F":
             set_at_pos(s, row, col, "@")
             return _victory
         # trap => stop and die
-        elif c in "x":
+        elif c in "x|-":
             set_at_pos(s, row, col, "Y")
             return _defeated
         # hole => stop and implicitly remove hole
@@ -181,7 +252,7 @@ def move(s, dir):
             if not in_bounds(height, width, over_row, over_col):
                 return _unfinished
             nc = at_pos(s, over_row, over_col)
-            if nc in " _.x":
+            if nc in " _.x|-+":
                 set_at_pos(s, over_row, over_col, "W")
                 set_at_pos(s, next_row, next_col, "G")
                 set_at_pos(s, row, col, ".")
@@ -189,7 +260,8 @@ def move(s, dir):
                 set_at_pos(s, over_row, over_col, "_")
                 set_at_pos(s, next_row, next_col, "G")
                 set_at_pos(s, row, col, ".")
-            return _unfinished
+            return determine_new_state(s)
+
         # heavy weight => push it until it reaches an obstacle; remove it when it moves on a hole; destroy traps on its path
         elif c in "w":
             row, col = next_row, next_col
@@ -198,7 +270,7 @@ def move(s, dir):
                 if not in_bounds(height, width, next_row, next_col):
                     break
                 nc = at_pos(s, next_row, next_col)
-                if nc in " _.x":
+                if nc in " _.x|-+":
                     set_at_pos(s, row, col, " ")
                     set_at_pos(s, next_row, next_col, "w")
                     row, col = next_row, next_col
@@ -212,6 +284,8 @@ def move(s, dir):
         else:
             eprint(f"invalid level character {c}")
             return _invalid
+
+        determine_new_state(s)
 
 
 def print_help():
@@ -273,7 +347,9 @@ if __name__ == '__main__':
     args = init()
     quiet = args.q
     s = load_file(args.file)
+    # s = update_lasers(s)
     e_code = validate_state(s)
+
     if e_code != _unfinished:
         if not quiet:
             print_state(s)
@@ -311,6 +387,7 @@ if __name__ == '__main__':
         for d in dirs:
             if d in "hjkl":
                 e_code = move(s, d)
+                s = update_lasers(s)
                 state_history.append(deepcopy(s))
                 command_history = command_history + d
             elif d == "q":
