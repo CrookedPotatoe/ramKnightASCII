@@ -1,0 +1,11 @@
+# move the ram (G) with hjkl-keys (left down up right) 
+# the ram moves always until it hits an obstacle
+# 
+WWWWWWWWWWWWWWWWWW
+W               WW
+W WWWWWW WWWWWW WW
+W WWWWWW WWWWWW WW
+W WWWWWW WWWWWW WW
+W WWWWWWF       WW
+WGWWWWWWWWWWWWWWWW
+WWWWWWWWWWWWWWWWWW
